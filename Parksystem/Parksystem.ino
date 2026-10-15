@@ -24,8 +24,8 @@
 // ---------- Hardware ----------
 const int PIN_SERVO_EINFAHRT = 8;   // gruene Schranke
 const int PIN_SERVO_AUSFAHRT = 9;   // rote Schranke
-const int WINKEL_ZU = 0;
-const int WINKEL_OFFEN = 90;
+const int WINKEL_ZU = 90;
+const int WINKEL_OFFEN = 0;
 const unsigned long SCHRANKE_OFFEN_MS = 5000;  // US-02: schliesst nach Durchfahrt automatisch
 // Servo faehrt langsam (1 Grad pro Schritt), damit der Anlaufstrom die USB-Versorgung nicht einbrechen laesst
 const unsigned long SERVO_SCHRITT_MS = 15;      // 90 Grad in ca. 1.4 s
