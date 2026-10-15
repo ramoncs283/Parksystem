@@ -1,2 +1,6 @@
-Parksystem/build/
 .DS_Store
+*/build/
+mac-app/daten.json
+mac-app/daten.json.tmp
+mac-app/parksystem.log
+mac-app/__pycache__/
