@@ -245,16 +245,8 @@ void setup() {
   Serial.begin(115200);
   rp2040.wdt_begin(8000);
 
-  // Servos nacheinander kurz in die Zu-Position fahren und wieder abschalten
-  delay(300);
-  einfahrt.servo.attach(einfahrt.pin, 500, 2500, WINKEL_ZU);
-  delay(600);
-  einfahrt.servo.detach();
-  rp2040.wdt_reset();
-  ausfahrt.servo.attach(ausfahrt.pin, 500, 2500, WINKEL_ZU);
-  delay(600);
-  ausfahrt.servo.detach();
-  rp2040.wdt_reset();
+  // Servos beim Start nicht bewegen: zusammen mit dem WLAN-Start wuerde das die
+  // USB-Versorgung einbrechen lassen. Sie werden erst beim ersten Oeffnen angesteuert.
 
   WiFi.mode(WIFI_STA);
   verbindeWlan();

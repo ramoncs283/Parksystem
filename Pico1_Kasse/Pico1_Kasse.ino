@@ -9,6 +9,11 @@
     - Berechnet die Parkgebuehr
     - Beantwortet die Anfragen von Pico 2 (Schranken) bei Ein- und Ausfahrt
 
+  Ein-Pico-Betrieb:
+    Pico 1 kann das ganze System auch alleine betreiben. Dann haengen die Servos an Pico 1
+    (gruene Schranke GP8, rote Schranke GP9) und die Kamera-Simulation ist der erste Tab der
+    Weboberflaeche. Mit zwei Picos bleiben GP8/GP9 an Pico 1 einfach frei.
+
   Schnittstelle fuer Pico 2 (Antwort: erste Zeile "JA" oder "NEIN", danach die Meldung):
     /intern/einfahrt?kz=ZH123456   Fahrzeug registrieren
     /intern/ausfahrt?kz=ZH123456   Darf das Fahrzeug ausfahren? (bei JA wird es ausgetragen)
@@ -23,6 +28,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <EEPROM.h>
+#include <Servo.h>
 #include "webpage.h"
 
 const char *AP_SSID = "Parksystem";
@@ -32,6 +38,16 @@ const int TARIF_RAPPEN_PRO_STUNDE = 200;
 const uint32_t KULANZ_SEK = 15 * 60;
 const int MAX_FAHRZEUGE = 50;
 const uint32_t SPEICHER_MAGIC = 0x50415231;  // "PAR1"
+const int MAX_FEHLVERSUCHE = 3;
+
+// ---------- Schranken (nur im Ein-Pico-Betrieb angeschlossen) ----------
+const int PIN_SERVO_EINFAHRT = 8;   // gruene Schranke
+const int PIN_SERVO_AUSFAHRT = 9;   // rote Schranke
+const int WINKEL_ZU = 90;
+const int WINKEL_OFFEN = 0;
+const unsigned long SCHRANKE_OFFEN_MS = 5000;   // US-02: schliesst nach Durchfahrt automatisch
+const unsigned long SERVO_SCHRITT_MS = 15;      // 90 Grad in ca. 1.4 s (innert 2 s offen)
+const unsigned long SERVO_AUS_NACH_MS = 400;    // im Stillstand abschalten, kein Dauerstrom
 
 struct Fahrzeug {
   bool belegt;
@@ -52,8 +68,21 @@ struct Speicher {
   Fahrzeug fahrzeuge[MAX_FAHRZEUGE];
 };
 
+struct Schranke {
+  Servo servo;
+  int pin;
+  const char *name;
+  int winkel;
+  int ziel;
+  unsigned long letzterSchritt;
+  unsigned long geoeffnetUm;
+};
+
 Speicher daten;
 WebServer server(80);
+Schranke einfahrt = {Servo(), PIN_SERVO_EINFAHRT, "Einfahrt", WINKEL_ZU, WINKEL_ZU, 0, 0};
+Schranke ausfahrt = {Servo(), PIN_SERVO_AUSFAHRT, "Ausfahrt", WINKEL_ZU, WINKEL_ZU, 0, 0};
+int fehlversuche = 0;
 
 // Uhr: wird vom Browser bzw. von Pico 2 mit jeder Anfrage synchronisiert
 uint32_t epochBasis = 0;
@@ -142,6 +171,42 @@ int offenerBetrag(const Fahrzeug &f) {
   uint32_t seitZahlung = seit(f.bezahltUm);
   if (seitZahlung <= KULANZ_SEK) return 0;
   return gebuehrFuer(seitZahlung);  // Zeit nach der Zahlung wird nachberechnet (US-08)
+}
+
+// ======================================================================
+// Schranken (Ein-Pico-Betrieb)
+// ======================================================================
+
+bool istOffen(const Schranke &s) {
+  return s.ziel == WINKEL_OFFEN;
+}
+
+void oeffne(Schranke &s) {
+  s.ziel = WINKEL_OFFEN;
+  s.geoeffnetUm = millis();
+  logMeldung(String("Schranke ") + s.name + " OFFEN");
+}
+
+void schliesse(Schranke &s) {
+  s.ziel = WINKEL_ZU;
+  logMeldung(String("Schranke ") + s.name + " ZU");
+}
+
+// Servo schrittweise Richtung Ziel bewegen, im Stillstand abschalten
+void bewegeServo(Schranke &s) {
+  if (s.winkel == s.ziel) {
+    if (s.servo.attached() && millis() - s.letzterSchritt > SERVO_AUS_NACH_MS) s.servo.detach();
+    return;
+  }
+  if (!s.servo.attached()) s.servo.attach(s.pin, 500, 2500, s.winkel);
+  if (millis() - s.letzterSchritt < SERVO_SCHRITT_MS) return;
+  s.letzterSchritt = millis();
+  s.winkel += s.ziel > s.winkel ? 1 : -1;
+  s.servo.write(s.winkel);
+}
+
+void pruefeAutoSchliessen(Schranke &s) {
+  if (istOffen(s) && millis() - s.geoeffnetUm >= SCHRANKE_OFFEN_MS) schliesse(s);
 }
 
 // ======================================================================
@@ -281,6 +346,40 @@ Ergebnis testhilfe(const String &eingabe, const String &was, long minuten) {
   return {true, kz + ": " + was + " auf " + zeitText(t) + " gesetzt (vor " + minuten + " Min)."};
 }
 
+// Kamera-Simulation im Ein-Pico-Betrieb (US-01 bis US-04)
+Ergebnis einfahren(const String &eingabe) {
+  if (normalisiere(eingabe) == "") {
+    fehlversuche++;
+    logMeldung("Einfahrt abgelehnt, Kennzeichen ungueltig/nicht lesbar: '" + eingabe + "' (Fehlversuch " + fehlversuche + ")");
+    String m = "Kennzeichen nicht erkannt oder ungueltig. Schranke bleibt geschlossen.";
+    if (fehlversuche >= MAX_FEHLVERSUCHE) m += " Bitte Hilfe-Knopf druecken.";
+    return {false, m};
+  }
+  Ergebnis e = einfahrtRegistrieren(eingabe);
+  if (e.ok) {
+    fehlversuche = 0;
+    oeffne(einfahrt);
+    e.meldung += " Schranke offen.";
+  }
+  return e;
+}
+
+// Kamera-Simulation im Ein-Pico-Betrieb (US-07, US-08)
+Ergebnis ausfahren(const String &eingabe) {
+  Ergebnis e = ausfahrtPruefen(eingabe);
+  if (e.ok) {
+    oeffne(ausfahrt);
+    e.meldung += " Schranke offen.";
+  }
+  return e;
+}
+
+// US-03: Klingel/Hilfe
+Ergebnis hilfeRufen() {
+  logMeldung("!!! HILFE angefordert an der Einfahrt - Personal informiert !!!");
+  return {true, "Personal wurde informiert. Bitte warten."};
+}
+
 Ergebnis zuruecksetzen() {
   for (int i = 0; i < MAX_FAHRZEUGE; i++) daten.fahrzeuge[i].belegt = false;
   speichern();
@@ -336,6 +435,16 @@ void setupWeb() {
   });
   server.on("/api/reset", []() { sendeJson(zuruecksetzen()); });
 
+  // Kamera-Simulation und Schranken (Ein-Pico-Betrieb)
+  server.on("/api/einfahrt", []() { syncUhr(); sendeJson(einfahren(server.arg("kz"))); });
+  server.on("/api/ausfahrt", []() { syncUhr(); sendeJson(ausfahren(server.arg("kz"))); });
+  server.on("/api/hilfe", []() { sendeJson(hilfeRufen()); });
+  server.on("/api/status", []() {
+    server.send(200, "application/json",
+                String("{\"einfahrt\":") + (istOffen(einfahrt) ? "true" : "false") +
+                ",\"ausfahrt\":" + (istOffen(ausfahrt) ? "true" : "false") + "}");
+  });
+
   // Schnittstelle fuer Pico 2
   server.on("/intern/ping", []() { syncUhr(); sendeIntern({true, "Kasse bereit"}); });
   server.on("/intern/einfahrt", []() { syncUhr(); sendeIntern(einfahrtRegistrieren(server.arg("kz"))); });
@@ -354,6 +463,9 @@ void setup() {
   EEPROM.begin(sizeof(Speicher));
   laden();
 
+  // Servos beim Start nicht bewegen: zusammen mit dem WLAN-Start wuerde das die
+  // USB-Versorgung einbrechen lassen. Sie werden erst beim ersten Oeffnen angesteuert.
+
   WiFi.mode(WIFI_AP);
   WiFi.softAP(AP_SSID, AP_PASS);
   setupWeb();
@@ -365,4 +477,8 @@ void setup() {
 void loop() {
   rp2040.wdt_reset();
   server.handleClient();
+  bewegeServo(einfahrt);
+  bewegeServo(ausfahrt);
+  pruefeAutoSchliessen(einfahrt);
+  pruefeAutoSchliessen(ausfahrt);
 }

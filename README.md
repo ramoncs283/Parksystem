@@ -24,16 +24,22 @@ Browser (Kamera)         ──>  Pico 2 Schranken  http://192.168.4.2
 
 WLAN: **`Parksystem`**, Passwort **`parkhaus123`**. Notebooks verbinden sich mit diesem WLAN.
 
-### Verdrahtung (Pico 2)
+### Betrieb mit nur einem Pico
+
+Pico 1 kann das ganze System auch alleine betreiben. Dazu nur `Pico1_Kasse` flashen und die Servos an Pico 1 anschliessen (gleiche Pins wie unten). Die Kamera-Simulation ist dann der erste Tab auf **http://192.168.4.1**, daneben Kasse, Automat, Übersicht und Testhilfe.
+
+Mit zwei Picos bleiben GP8/GP9 an Pico 1 frei und die Kamera-Simulation läuft auf Pico 2.
+
+### Verdrahtung (Pico 2, bzw. Pico 1 im Ein-Pico-Betrieb)
 
 | Schranke | Farbe | Signal (orange) | VCC (rot) | GND (braun) |
 |---|---|---|---|---|
 | Einfahrt | grün | GP8 (Pin 11) | VBUS (Pin 40) | GND (Pin 8) |
 | Ausfahrt | rot | GP9 (Pin 12) | VBUS (Pin 40) | GND (Pin 13) |
 
-Pico 1 braucht nur die USB-Stromversorgung.
+Mit zwei Picos braucht Pico 1 nur die USB-Stromversorgung.
 
-Zwei SG90 über USB sind an der Grenze dessen, was der USB-Anschluss liefert. Die Servos fahren deshalb langsam und sind im Stillstand abgeschaltet. Für einen stabilen Betrieb lohnt sich trotzdem eine eigene 5-V-Versorgung für die Servos (deren GND mit dem GND des Picos verbinden).
+Zwei SG90 über USB sind an der Grenze dessen, was der USB-Anschluss liefert. Die Servos fahren deshalb langsam, werden beim Start nicht bewegt und sind im Stillstand abgeschaltet. Für einen stabilen Betrieb lohnt sich trotzdem eine eigene 5-V-Versorgung für die Servos (deren GND mit dem GND des Picos verbinden).
 
 ### Regeln (gemäss Testkonzept, Annahmen A1–A5)
 
@@ -58,7 +64,7 @@ BOOTSEL gedrückt halten, den Pico einstecken und die `.uf2`-Datei aus dem `buil
 
 ### Alternative: Mac-App mit einem Pico
 
-Für Tests mit nur einem Pico gibt es eine zweite Variante:
+Als weitere Variante kann die Logik auch auf dem Mac laufen:
 
 - `mac-app/parksystem.py` enthält die ganze Logik und die Weboberfläche und läuft lokal auf dem Mac (Python 3, nur Standardbibliothek).
 - `Schranken/Schranken.ino` läuft auf dem Pico und bewegt nur die Servos. Die Befehle kommen über USB (`E OPEN`, `E CLOSE`, `A OPEN`, `A CLOSE`, `PING`, `STATUS`).

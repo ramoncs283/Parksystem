@@ -25,15 +25,29 @@ pre.ok{border-color:#1f8a4c}pre.fehler{border-color:#c0392b}
 .schranken{display:flex;gap:12px;margin-top:14px}
 .schranken div{flex:1;text-align:center;padding:10px;border-radius:8px;background:#eef1f5;font-weight:600}
 </style></head><body>
-<header>Pico 1 – Kasse </header>
+<header>Pico 1 – Kasse</header>
 <nav>
-<button data-s="kasse" class="aktiv">Kasse</button>
+<button data-s="kamera" class="aktiv">Kamera (Ein-Pico-Betrieb)</button>
+<button data-s="kasse">Kasse</button>
 <button data-s="automat">Automat</button>
 <button data-s="uebersicht">Übersicht</button>
 <button data-s="test">Testhilfe</button>
 </nav>
 <main>
-<section id="kasse" class="aktiv">
+<section id="kamera" class="aktiv">
+<h3>Kamera-Simulation</h3>
+<p style="color:#6b7280;margin-top:-6px">Nur im Ein-Pico-Betrieb. Mit zwei Picos die Kamera-Simulation auf Pico 2 benutzen (http://192.168.4.2).</p>
+<label>Kennzeichen</label><input id="kz_kamera" placeholder="ZH 123456">
+<div class="knoepfe">
+<button class="gruen" onclick="api('einfahrt',{kz:v('kz_kamera')},'out_kamera')">Einfahrt</button>
+<button class="rot" onclick="api('ausfahrt',{kz:v('kz_kamera')},'out_kamera')">Ausfahrt</button>
+<button class="grau" onclick="api('hilfe',{},'out_kamera')">Hilfe / Klingel</button>
+</div>
+<pre id="out_kamera"></pre>
+<div class="schranken"><div id="s_ein">Einfahrt: ?</div><div id="s_aus">Ausfahrt: ?</div></div>
+</section>
+
+<section id="kasse">
 <h3>Kasse</h3>
 <label>Kennzeichen</label><input id="kz_kasse" placeholder="ZH 123456">
 <div class="knoepfe">
@@ -43,6 +57,7 @@ pre.ok{border-color:#1f8a4c}pre.fehler{border-color:#c0392b}
 </div>
 <pre id="out_kasse"></pre>
 </section>
+
 <section id="automat">
 <h3>Automat</h3>
 <label>Kennzeichen</label><input id="kz_automat" placeholder="SG 9001">
@@ -53,11 +68,13 @@ pre.ok{border-color:#1f8a4c}pre.fehler{border-color:#c0392b}
 </div>
 <pre id="out_automat"></pre>
 </section>
+
 <section id="uebersicht">
 <h3>Übersicht parkierter Fahrzeuge</h3>
 <div class="knoepfe"><button onclick="api('uebersicht',{},'out_uebersicht')">Aktualisieren</button></div>
 <pre id="out_uebersicht"></pre>
 </section>
+
 <section id="test">
 <h3>Testhilfe</h3>
 <label>Kennzeichen</label><input id="kz_test" placeholder="BE 45678">
@@ -87,7 +104,13 @@ async function api(pfad,args,out){
   }catch(e){el.textContent='Keine Verbindung zum Pico.';el.className='fehler'}
   status();
 }
-async function status(){}
-
+async function status(){
+  try{
+    const s=await (await fetch('/api/status?'+new URLSearchParams(zeit()))).json();
+    document.getElementById('s_ein').textContent='Einfahrt (grün): '+(s.einfahrt?'OFFEN':'ZU');
+    document.getElementById('s_aus').textContent='Ausfahrt (rot): '+(s.ausfahrt?'OFFEN':'ZU');
+  }catch(e){}
+}
+status();setInterval(status,1000);
 </script>
 </body></html>)HTML";
