@@ -1,12 +1,14 @@
 #pragma once
 
-// Weboberflaeche: Kamera-Simulation, Kasse, Automat, Uebersicht, Testhilfe
+// Weboberflaeche (wird vom Pico ausgeliefert)
 const char WEBPAGE[] PROGMEM = R"HTML(<!DOCTYPE html>
 <html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Parksystem</title>
 <style>
 body{font-family:system-ui,sans-serif;margin:0;background:#f2f4f7;color:#1d2433}
+.pico{float:right;font-size:14px;font-weight:500;padding:3px 10px;border-radius:12px;background:#6b7280}
+.pico.an{background:#1f8a4c}.pico.aus{background:#c0392b}
 header{background:#1d3a6e;color:#fff;padding:14px 20px;font-size:20px;font-weight:600}
 nav{display:flex;flex-wrap:wrap;gap:4px;padding:10px 20px;background:#fff;border-bottom:1px solid #d8dde6}
 nav button{border:0;background:#e8ecf3;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:15px}
@@ -23,13 +25,9 @@ pre.ok{border-color:#1f8a4c}pre.fehler{border-color:#c0392b}
 .schranken{display:flex;gap:12px;margin-top:14px}
 .schranken div{flex:1;text-align:center;padding:10px;border-radius:8px;background:#eef1f5;font-weight:600}
 </style></head><body>
-<header>Parksystem M450</header>
+<header>Pico 2 – Schranken <span id="pico" class="pico">Kasse: ?</span></header>
 <nav>
 <button data-s="kamera" class="aktiv">Kamera (Ein/Aus)</button>
-<button data-s="kasse">Kasse</button>
-<button data-s="automat">Automat</button>
-<button data-s="uebersicht">Übersicht</button>
-<button data-s="test">Testhilfe</button>
 </nav>
 <main>
 <section id="kamera" class="aktiv">
@@ -42,46 +40,6 @@ pre.ok{border-color:#1f8a4c}pre.fehler{border-color:#c0392b}
 </div>
 <pre id="out_kamera"></pre>
 <div class="schranken"><div id="s_ein">Einfahrt: ?</div><div id="s_aus">Ausfahrt: ?</div></div>
-</section>
-
-<section id="kasse">
-<h3>Kasse</h3>
-<label>Kennzeichen</label><input id="kz_kasse" placeholder="ZH 123456">
-<div class="knoepfe">
-<button onclick="api('gebuehr',{kz:v('kz_kasse')},'out_kasse')">Betrag anzeigen</button>
-<button class="gruen" onclick="api('zahlen',{kz:v('kz_kasse'),ok:1,ort:'Kasse'},'out_kasse')">Zahlung bestätigen</button>
-<button class="rot" onclick="api('zahlen',{kz:v('kz_kasse'),ok:0,ort:'Kasse'},'out_kasse')">Zahlung abbrechen / ablehnen</button>
-</div>
-<pre id="out_kasse"></pre>
-</section>
-
-<section id="automat">
-<h3>Automat</h3>
-<label>Kennzeichen</label><input id="kz_automat" placeholder="SG 9001">
-<div class="knoepfe">
-<button onclick="api('gebuehr',{kz:v('kz_automat')},'out_automat')">Betrag anzeigen</button>
-<button class="gruen" onclick="api('zahlen',{kz:v('kz_automat'),ok:1,ort:'Automat'},'out_automat')">Mit Karte bezahlen</button>
-<button class="rot" onclick="api('zahlen',{kz:v('kz_automat'),ok:0,ort:'Automat'},'out_automat')">Karte abgelehnt simulieren</button>
-</div>
-<pre id="out_automat"></pre>
-</section>
-
-<section id="uebersicht">
-<h3>Übersicht parkierter Fahrzeuge</h3>
-<div class="knoepfe"><button onclick="api('uebersicht',{},'out_uebersicht')">Aktualisieren</button></div>
-<pre id="out_uebersicht"></pre>
-</section>
-
-<section id="test">
-<h3>Testhilfe</h3>
-<label>Kennzeichen</label><input id="kz_test" placeholder="BE 45678">
-<label>Minuten zurück</label><input id="min_test" type="number" value="61">
-<div class="knoepfe">
-<button onclick="api('testhilfe',{kz:v('kz_test'),was:'einfahrt',min:v('min_test')},'out_test')">Einfahrt vor X Min</button>
-<button onclick="api('testhilfe',{kz:v('kz_test'),was:'zahlung',min:v('min_test')},'out_test')">Zahlung vor X Min</button>
-<button class="rot" onclick="if(confirm('Alle Daten löschen?'))api('reset',{},'out_test')">Testdaten zurücksetzen</button>
-</div>
-<pre id="out_test"></pre>
 </section>
 </main>
 <script>
@@ -98,14 +56,16 @@ async function api(pfad,args,out){
   try{
     const r=await (await fetch('/api/'+pfad+'?'+q)).json();
     el.textContent=r.meldung;el.className=r.ok?'ok':'fehler';
-  }catch(e){el.textContent='Keine Verbindung zum Parksystem.';el.className='fehler'}
+  }catch(e){el.textContent='Keine Verbindung zum Pico.';el.className='fehler'}
   status();
 }
 async function status(){
   try{
-    const s=await (await fetch('/api/status?'+new URLSearchParams(zeit()))).json();
+    const s=await (await fetch('/api/status')).json();
     document.getElementById('s_ein').textContent='Einfahrt (grün): '+(s.einfahrt?'OFFEN':'ZU');
     document.getElementById('s_aus').textContent='Ausfahrt (rot): '+(s.ausfahrt?'OFFEN':'ZU');
+    const p=document.getElementById('pico');
+    p.textContent=s.kasse?'Kasse verbunden':'Kasse nicht erreichbar';p.className='pico '+(s.kasse?'an':'aus');
   }catch(e){}
 }
 status();setInterval(status,1000);
